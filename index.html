@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resonance Field</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #030508; overflow: hidden; font-family: 'Helvetica Neue', Helvetica, sans-serif; }
+  #wrap { position: relative; width: 100vw; height: 100vh; }
+  canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  #bgCanvas { z-index: 1; }
+  #fgCanvas  { z-index: 2; }
+
+  /* ── Controls panel ── */
+  #controls {
+    position: fixed; right: 0; top: 50%;
+    transform: translateY(-50%);
+    width: 204px;
+    background: rgba(3,5,8,0.92);
+    border: 1px solid rgba(0,216,255,0.1);
+    border-right: none;
+    padding: 1.1rem 1rem 1.2rem;
+    z-index: 20;
+    transition: right 0.3s ease;
+  }
+  #controls.hidden { right: -204px; }
+
+  #ctrl-tab {
+    position: fixed; right: 204px; top: 50%;
+    transform: translateY(-50%);
+    z-index: 21;
+    background: rgba(3,5,8,0.92);
+    border: 1px solid rgba(0,216,255,0.1);
+    border-right: none;
+    color: rgba(0,216,255,0.55);
+    cursor: pointer; padding: 0.75rem 0.32rem;
+    font-size: 0.55rem; letter-spacing: 0.18em; text-transform: uppercase;
+    writing-mode: vertical-rl;
+    transition: right 0.3s ease;
+    user-select: none;
+  }
+  #ctrl-tab.panel-hidden { right: 0; }
+  #ctrl-tab:hover { color: rgba(0,216,255,0.9); }
+
+  .ctrl-group { margin-bottom: 1.05rem; }
+  .ctrl-group-label {
+    font-size: 0.5rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: rgba(0,216,255,0.32); margin-bottom: 0.72rem;
+    padding-bottom: 0.32rem; border-bottom: 1px solid rgba(0,216,255,0.07);
+  }
+  .ctrl-row { display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem; }
+  .ctrl-row label {
+    font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: rgba(255,255,255,0.38); width: 46px; flex-shrink: 0;
+  }
+  .ctrl-row input[type=range] {
+    flex: 1; -webkit-appearance: none; height: 2px;
+    background: rgba(0,216,255,0.12); border-radius: 1px; outline: none; cursor: pointer;
+  }
+  .ctrl-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 9px; height: 9px; border-radius: 50%;
+    background: #00D8FF; box-shadow: 0 0 5px rgba(0,216,255,0.75); cursor: pointer;
+  }
+  .ctrl-row .val {
+    font-size: 0.5rem; color: rgba(0,216,255,0.42); width: 22px;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Overlay ── */
+  #overlay {
+    position: absolute; z-index: 10; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #030508; cursor: pointer; transition: opacity 1.2s ease;
+  }
+  #overlay h1 {
+    font-size: clamp(2rem,5vw,3.8rem); font-weight: 100; letter-spacing: 0.35em;
+    color: rgba(255,255,255,0.88); text-transform: uppercase; margin-bottom: 1.2rem;
+  }
+  #overlay p { font-size: 0.8rem; letter-spacing: 0.2em; color: rgba(0,216,255,0.5); text-transform: uppercase; }
+  #label {
+    position: absolute; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    z-index: 5; font-size: 0.6rem; letter-spacing: 0.22em; color: rgba(0,216,255,0.14);
+    text-transform: uppercase; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="bgCanvas"></canvas>
+  <canvas id="fgCanvas"></canvas>
+
+  <div id="controls">
+    <div class="ctrl-group">
+      <div class="ctrl-group-label">Audio Filters</div>
+      <div class="ctrl-row"><label>Bass</label><input type="range" id="sl-bass" min="0" max="2" step="0.05" value="1"><span class="val" id="v-bass">1.0</span></div>
+      <div class="ctrl-row"><label>Mid</label><input type="range" id="sl-mid" min="0" max="2" step="0.05" value="1"><span class="val" id="v-mid">1.0</span></div>
+      <div class="ctrl-row"><label>Treble</label><input type="range" id="sl-treble" min="0" max="2" step="0.05" value="1"><span class="val" id="v-treble">1.0</span></div>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-group-label">Form</div>
+      <div class="ctrl-row"><label>Rotate</label><input type="range" id="sl-rot" min="0" max="3" step="0.05" value="1"><span class="val" id="v-rot">1.0</span></div>
+      <div class="ctrl-row"><label>Glow</label><input type="range" id="sl-glow" min="0" max="2" step="0.05" value="1"><span class="val" id="v-glow">1.0</span></div>
+      <div class="ctrl-row"><label>Twist</label><input type="range" id="sl-twist" min="2" max="10" step="0.25" value="5"><span class="val" id="v-twist">5.0</span></div>
+      <div class="ctrl-row"><label>Radius</label><input type="range" id="sl-radius" min="0.3" max="2" step="0.05" value="1"><span class="val" id="v-radius">1.0</span></div>
+    </div>
+  </div>
+
+  <div id="ctrl-tab">Controls</div>
+
+  <div id="overlay">
+    <h1>Resonance Field</h1>
+    <p>click to activate microphone</p>
+  </div>
+  <div id="label">Resonance Field · DNA Harmonic Structure</div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// CANVAS SETUP
+// ─────────────────────────────────────────────
+const bgCanvas = document.getElementById('bgCanvas');
+const fgCanvas = document.getElementById('fgCanvas');
+const bgCtx    = bgCanvas.getContext('2d');
+const fgCtx    = fgCanvas.getContext('2d');
+const overlay  = document.getElementById('overlay');
+
+let W, H;
+function resize() {
+  W = bgCanvas.width = fgCanvas.width  = window.innerWidth;
+  H = bgCanvas.height= fgCanvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─────────────────────────────────────────────
+// CONTROLS
+// ─────────────────────────────────────────────
+const ctrl = { bass:1, mid:1, treble:1, rotSpeed:1, glow:1, twist:5, radius:1 };
+
+function bindSlider(id, valId, key) {
+  const sl = document.getElementById(id);
+  const vl = document.getElementById(valId);
+  sl.addEventListener('input', () => {
+    ctrl[key] = parseFloat(sl.value);
+    vl.textContent = Number(ctrl[key]).toFixed(1);
+  });
+}
+bindSlider('sl-bass',   'v-bass',   'bass');
+bindSlider('sl-mid',    'v-mid',    'mid');
+bindSlider('sl-treble', 'v-treble', 'treble');
+bindSlider('sl-rot',    'v-rot',    'rotSpeed');
+bindSlider('sl-glow',   'v-glow',   'glow');
+bindSlider('sl-twist',  'v-twist',  'twist');
+bindSlider('sl-radius', 'v-radius', 'radius');
+
+const panel   = document.getElementById('controls');
+const ctrlTab = document.getElementById('ctrl-tab');
+let panelOpen = true;
+ctrlTab.addEventListener('click', () => {
+  panelOpen = !panelOpen;
+  panel.classList.toggle('hidden', !panelOpen);
+  ctrlTab.classList.toggle('panel-hidden', !panelOpen);
+});
+
+// ─────────────────────────────────────────────
+// COLOR PALETTE
+// ─────────────────────────────────────────────
+const COL = {
+  void:   [3,   5,   8],
+  ground: [14,  30,  58],
+  energy: [0,   216, 255],
+  signal: [255, 209, 102],
+  accent: [207, 61,  255],
+};
+
+const lerp = (a,b,t) => a+(b-a)*t;
+function lerpColor(a,b,t) {
+  t = Math.max(0,Math.min(1,t));
+  return [
+    Math.round(a[0]+(b[0]-a[0])*t),
+    Math.round(a[1]+(b[1]-a[1])*t),
+    Math.round(a[2]+(b[2]-a[2])*t)
+  ];
+}
+
+// ─────────────────────────────────────────────
+// PERLIN NOISE (inline — no CDN required)
+// ─────────────────────────────────────────────
+const _P=[151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
+const _pm=new Uint8Array(512);for(let i=0;i<256;i++)_pm[i]=_pm[i+256]=_P[i];
+const _fd=t=>t*t*t*(t*(t*6-15)+10),_mx=(a,b,t)=>a+t*(b-a);
+function _g3(h,x,y,z){const u=h<8?x:y,v=h<4?y:(h===12||h===14)?x:z;return((h&1)?-u:u)+((h&2)?-v:v);}
+function noise3D(x,y,z){
+  const X=Math.floor(x)&255,Y=Math.floor(y)&255,Z=Math.floor(z)&255;
+  x-=Math.floor(x);y-=Math.floor(y);z-=Math.floor(z);
+  const u=_fd(x),v=_fd(y),w=_fd(z);
+  const a=_pm[X]+Y,b=_pm[X+1]+Y,aa=_pm[a]+Z,ab=_pm[a+1]+Z,ba=_pm[b]+Z,bb=_pm[b+1]+Z;
+  return _mx(w,_mx(v,_mx(u,_g3(_pm[aa],x,y,z),_g3(_pm[ba],x-1,y,z)),_mx(u,_g3(_pm[ab],x,y-1,z),_g3(_pm[bb],x-1,y-1,z))),_mx(v,_mx(u,_g3(_pm[aa+1],x,y,z-1),_g3(_pm[ba+1],x-1,y,z-1)),_mx(u,_g3(_pm[ab+1],x,y-1,z-1),_g3(_pm[bb+1],x-1,y-1,z-1))));
+}
+
+// ─────────────────────────────────────────────
+// AUDIO
+// ─────────────────────────────────────────────
+let audioCtx, analyser, fftData;
+let audioReady = false, demoMode = false;
+
+const audio = { f0:220, bass:0, mid:0, treble:0, total:0, centroid:0.5, energy:0 };
+const sm    = { bass:0, mid:0, treble:0, total:0, centroid:0.5, energy:0 };
+
+function smoothAudio() {
+  const t = 0.09;
+  sm.bass     = lerp(sm.bass,     audio.bass    * ctrl.bass,   t);
+  sm.mid      = lerp(sm.mid,      audio.mid     * ctrl.mid,    t);
+  sm.treble   = lerp(sm.treble,   audio.treble  * ctrl.treble, t);
+  sm.total    = lerp(sm.total,    audio.total,                  t);
+  sm.centroid = lerp(sm.centroid, audio.centroid,               t * 0.5);
+  sm.energy   = lerp(sm.energy,   audio.energy,                 t);
+}
+
+function bandEnergy(data, sr, fs, lo, hi) {
+  const l=Math.max(0,Math.floor(lo*fs/sr)), h=Math.min(data.length-1,Math.ceil(hi*fs/sr));
+  let s=0; for(let i=l;i<=h;i++) s+=data[i];
+  return s/((h-l+1)*255);
+}
+
+function hps(data, sr, fs, N=5) {
+  const n=data.length, lim=Math.floor(n/N);
+  let best=1, bv=-Infinity;
+  for(let i=2;i<lim;i++){
+    let p=1; for(let h=1;h<=N;h++) p*=(data[Math.min(i*h,n-1)]/255+0.001);
+    if(p>bv){bv=p;best=i;}
+  }
+  return best*sr/fs;
+}
+
+function readAudio() {
+  if (!analyser || !fftData) return;
+  analyser.getByteFrequencyData(fftData);
+  const SR=audioCtx.sampleRate, FS=analyser.fftSize;
+  audio.f0     = hps(fftData,SR,FS,5);
+  audio.bass   = bandEnergy(fftData,SR,FS,60,250);
+  audio.mid    = bandEnergy(fftData,SR,FS,250,2000);
+  audio.treble = bandEnergy(fftData,SR,FS,2000,8000);
+  audio.total  = bandEnergy(fftData,SR,FS,20,20000);
+  let num=0,den=0;
+  for(let i=1;i<fftData.length;i++){const f=i*SR/FS,m=fftData[i]/255;num+=f*m;den+=m;}
+  audio.centroid = den>0.001 ? Math.min(1,num/den/4000) : 0.5;
+  audio.energy   = audio.total;
+  smoothAudio();
+}
+
+// Demo mode (mic unavailable)
+let demoPhase=0, demoTimer=0;
+function updateDemo(dt) {
+  demoTimer += dt;
+  if (demoTimer > 5000) { demoTimer=0; demoPhase=(demoPhase+1)%6; }
+  const t2 = performance.now()*0.001;
+  audio.energy   = 0.32 + 0.18*Math.sin(t2*0.8);
+  audio.bass     = 0.18 + 0.12*Math.sin(t2*1.1);
+  audio.mid      = 0.28 + 0.12*Math.sin(t2*0.7);
+  audio.treble   = 0.10 + 0.06*Math.sin(t2*1.3);
+  audio.centroid = 0.40 + 0.32*Math.sin(t2*0.5);
+  audio.total    = audio.energy;
+  smoothAudio();
+}
+
+// ─────────────────────────────────────────────
+// BACKGROUND: CURL NOISE FLOW FIELD + PARTICLES
+// ─────────────────────────────────────────────
+const FCOLS=80, FROWS=60;
+const field=new Float32Array(FCOLS*FROWS*2);
+
+function updateField(time, bas) {
+  const eps=0.005;
+  for(let r=0;r<FROWS;r++) for(let c=0;c<FCOLS;c++){
+    const nx=c/FCOLS, ny=r/FROWS, t=time*0.00022+bas*0.28;
+    const n1=noise3D(nx,ny+eps,t), n2=noise3D(nx,ny-eps,t);
+    const n3=noise3D(nx+eps,ny,t), n4=noise3D(nx-eps,ny,t);
+    const i=(r*FCOLS+c)*2;
+    field[i  ] = (n1-n2)/(2*eps)*1.4;
+    field[i+1] =-(n3-n4)/(2*eps)*1.4;
+  }
+}
+
+function sampleField(px,py){
+  const c=Math.max(0,Math.min(FCOLS-1,Math.floor(px/W*FCOLS)));
+  const r=Math.max(0,Math.min(FROWS-1,Math.floor(py/H*FROWS)));
+  const i=(r*FCOLS+c)*2;
+  return {vx:field[i],vy:field[i+1]};
+}
+
+const PCNT=1800;
+const parts=[];
+function initParticles(){
+  for(let i=0;i<PCNT;i++) parts.push({
+    x:Math.random()*window.innerWidth, y:Math.random()*window.innerHeight,
+    vx:0, vy:0, age:Math.random()*450, maxAge:220+Math.random()*280
+  });
+}
+
+function tickParticles(bas) {
+  const spd=0.82+bas*0.9;
+  for(const p of parts){
+    const {vx,vy}=sampleField(p.x,p.y);
+    p.vx=p.vx*0.93+vx*spd*0.55;
+    p.vy=p.vy*0.93+vy*spd*0.55;
+    if(Math.random()<bas*0.035){const a=Math.random()*Math.PI*2;p.vx+=Math.cos(a)*1.4;p.vy+=Math.sin(a)*1.4;}
+    p.x+=p.vx; p.y+=p.vy; p.age++;
+    if(p.x<0||p.x>W||p.y<0||p.y>H||p.age>p.maxAge){
+      p.x=Math.random()*W; p.y=Math.random()*H; p.vx=0;p.vy=0;p.age=0;
+    }
+  }
+}
+
+function drawParticles(en) {
+  bgCtx.globalCompositeOperation='lighter';
+  for(const p of parts){
+    const sp=Math.hypot(p.vx,p.vy);
+    const life=1-p.age/(p.maxAge||300);
+    const a=Math.min(0.14,life*0.12*(0.25+sp*0.4));
+    const col=lerpColor(COL.ground,COL.energy,Math.min(1,sp*0.28+en*0.45));
+    bgCtx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${a})`;
+    bgCtx.fillRect(p.x-1,p.y-1,2,2);
+  }
+  bgCtx.globalCompositeOperation='source-over';
+}
+
+// ─────────────────────────────────────────────
+// 3-D DNA DOUBLE HELIX
+// ─────────────────────────────────────────────
+let dnaRotY = 0;
+const FOCAL  = 580;
+const TILT_X = 0.42;
+const cosTX  = Math.cos(TILT_X);
+const sinTX  = Math.sin(TILT_X);
+const RUNG_STEP = 4;
+
+function project3D(x3,y3,z3,cx,cy){
+  const cosR=Math.cos(dnaRotY), sinR=Math.sin(dnaRotY);
+  const x1 = x3*cosR - z3*sinR;
+  const z1 = x3*sinR + z3*cosR;
+  const y1 = y3*cosTX - z1*sinTX;
+  const z2 = y3*sinTX + z1*cosTX;
+  const sc = FOCAL/(FOCAL+z2+220);
+  return { sx:cx+x1*sc, sy:cy+y1*sc, z:z2, sc };
+}
+
+function drawDNA(en,bas,mid,tre,cen) {
+  const cx=W/2, cy=H/2;
+  const numTurns     = ctrl.twist;
+  const stepsPerTurn = Math.max(16, Math.round(30-(numTurns-2)*1.2));
+  const STEPS        = Math.round(numTurns*stepsPerTurn);
+  const heightPx     = Math.min(H*0.78, 440);
+  const halfH        = heightPx*0.5;
+  const baseR        = 82*ctrl.radius;
+  const r            = baseR + sm.bass*55;
+  const waveAmp      = sm.energy*14*ctrl.glow;
+  const waveFreq     = 3+sm.mid*2;
+
+  const s1 = new Array(STEPS+1);
+  const s2 = new Array(STEPS+1);
+
+  for(let i=0;i<=STEPS;i++){
+    const frac = i/STEPS;
+    const t    = frac*numTurns*Math.PI*2;
+    const y3   = -halfH+frac*heightPx;
+    const rw   = r+Math.sin(t*waveFreq+performance.now()*0.0015)*waveAmp;
+    s1[i] = { ...project3D(rw*Math.cos(t),         y3, rw*Math.sin(t),         cx,cy), frac };
+    s2[i] = { ...project3D(rw*Math.cos(t+Math.PI), y3, rw*Math.sin(t+Math.PI), cx,cy), frac };
+  }
+
+  const objs = [];
+  for(let i=0;i<STEPS;i++){
+    objs.push({type:'line', a:s1[i], b:s1[i+1], z:(s1[i].z+s1[i+1].z)*0.5, strand:0});
+    objs.push({type:'line', a:s2[i], b:s2[i+1], z:(s2[i].z+s2[i+1].z)*0.5, strand:1});
+  }
+  for(let i=0;i<=STEPS;i+=RUNG_STEP){
+    objs.push({type:'rung', a:s1[i], b:s2[i], z:(s1[i].z+s2[i].z)*0.5, frac:s1[i].frac});
+  }
+  for(let i=0;i<=STEPS;i+=2){
+    objs.push({type:'node', p:s1[i], z:s1[i].z, strand:0, frac:s1[i].frac});
+    objs.push({type:'node', p:s2[i], z:s2[i].z, strand:1, frac:s2[i].frac});
+  }
+
+  objs.sort((a,b)=>b.z-a.z);
+
+  fgCtx.save();
+
+  for(const o of objs){
+    const sc = o.type==='node' ? o.p.sc : (o.a.sc+o.b.sc)*0.5;
+    const df = Math.max(0.15,(sc-0.55)/0.45);
+
+    fgCtx.globalCompositeOperation='lighter';
+
+    if(o.type==='line'){
+      const col = o.strand===0 ? COL.energy : COL.accent;
+      const lw  = Math.max(0.5, sc*2.2*ctrl.glow);
+      const al  = Math.min(0.85,(0.4+sm.mid*0.5)*df*ctrl.glow);
+      fgCtx.strokeStyle=`rgba(${col[0]},${col[1]},${col[2]},${al*0.18})`;
+      fgCtx.lineWidth=lw*4.5;
+      fgCtx.beginPath(); fgCtx.moveTo(o.a.sx,o.a.sy); fgCtx.lineTo(o.b.sx,o.b.sy); fgCtx.stroke();
+      fgCtx.strokeStyle=`rgba(${col[0]},${col[1]},${col[2]},${al})`;
+      fgCtx.lineWidth=lw;
+      fgCtx.beginPath(); fgCtx.moveTo(o.a.sx,o.a.sy); fgCtx.lineTo(o.b.sx,o.b.sy); fgCtx.stroke();
+    }
+
+    else if(o.type==='rung'){
+      const c   = (sm.centroid+o.frac*0.35)%1;
+      const col = c<0.5 ? lerpColor(COL.signal,COL.energy,c*2) : lerpColor(COL.energy,COL.accent,(c-0.5)*2);
+      const al  = Math.min(0.75,(0.25+sm.treble*0.7)*df);
+      const lw  = Math.max(0.4, sc*1.4);
+      fgCtx.strokeStyle=`rgba(${col[0]},${col[1]},${col[2]},${al*0.22})`;
+      fgCtx.lineWidth=lw*3.5;
+      fgCtx.beginPath(); fgCtx.moveTo(o.a.sx,o.a.sy); fgCtx.lineTo(o.b.sx,o.b.sy); fgCtx.stroke();
+      fgCtx.strokeStyle=`rgba(${col[0]},${col[1]},${col[2]},${al})`;
+      fgCtx.lineWidth=lw;
+      fgCtx.beginPath(); fgCtx.moveTo(o.a.sx,o.a.sy); fgCtx.lineTo(o.b.sx,o.b.sy); fgCtx.stroke();
+      const mx=(o.a.sx+o.b.sx)*0.5, my=(o.a.sy+o.b.sy)*0.5;
+      const hr=Math.max(1.2,sc*3*ctrl.glow);
+      fgCtx.fillStyle=`rgba(255,255,255,${al*0.6})`;
+      fgCtx.beginPath(); fgCtx.arc(mx,my,hr,0,Math.PI*2); fgCtx.fill();
+    }
+
+    else if(o.type==='node'){
+      const col = o.strand===0 ? COL.energy : COL.accent;
+      const nr  = Math.max(1.8, sc*5*ctrl.glow*(1+sm.bass*0.9));
+      const al  = Math.min(0.95,(0.5+sm.energy*0.45)*df*ctrl.glow);
+      fgCtx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${al*0.22})`;
+      fgCtx.beginPath(); fgCtx.arc(o.p.sx,o.p.sy,nr*2.8,0,Math.PI*2); fgCtx.fill();
+      fgCtx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${al*0.55})`;
+      fgCtx.beginPath(); fgCtx.arc(o.p.sx,o.p.sy,nr,0,Math.PI*2); fgCtx.fill();
+      fgCtx.fillStyle=`rgba(255,255,255,${al*0.75})`;
+      fgCtx.beginPath(); fgCtx.arc(o.p.sx-nr*0.18,o.p.sy-nr*0.18,nr*0.38,0,Math.PI*2); fgCtx.fill();
+    }
+  }
+
+  fgCtx.globalCompositeOperation='source-over';
+  fgCtx.restore();
+}
+
+// ─────────────────────────────────────────────
+// SILENCE BREATH
+// ─────────────────────────────────────────────
+function drawBreath(en, time) {
+  if(en>0.06) return;
+  const amp = 1-en/0.06;
+  const cx=W/2, cy=H/2;
+  const r = 55+28*Math.sin(time*0.00078*Math.PI*2);
+  const a = 0.011*amp;
+  const g = fgCtx.createRadialGradient(cx,cy,0,cx,cy,r*3.5);
+  g.addColorStop(0,    `rgba(0,216,255,${a*2.2})`);
+  g.addColorStop(0.45, `rgba(14,30,58,${a})`);
+  g.addColorStop(1,    'rgba(0,0,0,0)');
+  fgCtx.fillStyle=g;
+  fgCtx.beginPath(); fgCtx.arc(cx,cy,r*3.5,0,Math.PI*2); fgCtx.fill();
+}
+
+// ─────────────────────────────────────────────
+// RENDER LOOP
+// ─────────────────────────────────────────────
+let lastTime=0, time=0;
+
+function render(ts) {
+  const dt=ts-lastTime; lastTime=ts; time+=dt;
+
+  if(audioReady) readAudio();
+  else if(demoMode) updateDemo(dt);
+
+  const {energy:en, bass:bas, mid, treble:tre, centroid:cen} = sm;
+
+  dnaRotY += (0.0038+en*0.006)*ctrl.rotSpeed;
+
+  bgCtx.globalCompositeOperation='source-over';
+  bgCtx.fillStyle=`rgba(${COL.void[0]},${COL.void[1]},${COL.void[2]},${0.028+bas*0.018})`;
+  bgCtx.fillRect(0,0,W,H);
+  updateField(time,bas);
+  tickParticles(bas);
+  drawParticles(en);
+
+  fgCtx.globalCompositeOperation='source-over';
+  fgCtx.fillStyle=`rgba(${COL.void[0]},${COL.void[1]},${COL.void[2]},${0.055+en*0.022})`;
+  fgCtx.fillRect(0,0,W,H);
+  drawBreath(en, time);
+  drawDNA(en,bas,mid,tre,cen);
+
+  requestAnimationFrame(render);
+}
+
+// ─────────────────────────────────────────────
+// AUDIO INIT
+// ─────────────────────────────────────────────
+async function initAudio() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.78;
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = -10;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    fftData = new Uint8Array(analyser.frequencyBinCount);
+    audioReady = true;
+    document.addEventListener('click', ()=>{ if(audioCtx.state==='suspended') audioCtx.resume(); });
+    return true;
+  } catch(e) {
+    console.warn('Mic unavailable — demo mode:', e.message);
+    demoMode = true;
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────
+// START
+// ─────────────────────────────────────────────
+initParticles();
+
+overlay.addEventListener('click', async () => {
+  overlay.style.opacity = '0';
+  overlay.style.pointerEvents = 'none';
+  await initAudio();
+  if (!audioReady) {
+    overlay.querySelector('p').textContent = 'demo mode — mic unavailable';
+    overlay.style.opacity = '1';
+    overlay.style.background = 'transparent';
+    overlay.querySelector('h1').style.display = 'none';
+  }
+  requestAnimationFrame(render);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.code==='Space'||e.code==='Enter') overlay.click();
+});
+</script>
+</body>
+</html>
